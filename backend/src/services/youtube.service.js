@@ -1,28 +1,21 @@
-import youtubedl from "yt-dlp-exec";
+import ytdl from "@distube/ytdl-core";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegPath from "ffmpeg-static";
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 /**
- * Fetches video metadata (title, duration, thumbnail) using yt-dlp.
+ * Fetches video metadata (title, duration, thumbnail) using @distube/ytdl-core natively.
  * @param {string} url - YouTube video URL
  * @returns {{ title: string, thumbnail: string, duration: number }}
  */
 export async function getVideoInfo(url) {
-    const info = await youtubedl(url, {
-        dumpSingleJson: true,
-        noCheckCertificates: true,
-        noWarnings: true,
-        preferFreeFormats: true,
-        // Using mobile clients helps bypass datacenter IP blocks without cookies
-        extractorArgs: "youtube:player_client=android,ios",
-    });
-
+    const info = await ytdl.getInfo(url);
+    const videoDetails = info.videoDetails;
     return {
-        title: info.title,
-        thumbnail: info.thumbnail,
-        duration: info.duration, // seconds as number
+        title: videoDetails.title,
+        thumbnail: videoDetails.thumbnails[videoDetails.thumbnails.length - 1].url,
+        duration: parseInt(videoDetails.lengthSeconds, 10),
     };
 }
 
@@ -39,15 +32,9 @@ export function streamMp3(url, title, res) {
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}.mp3"`);
 
-    const ytProc = youtubedl.exec(url, {
-        format: "bestaudio",
-        output: "-",
-        quiet: true,
-        // Apply the same bot-bypass to the download stream
-        extractorArgs: "youtube:player_client=android,ios",
-    }, { stdio: ["ignore", "pipe", "ignore"] });
+    const audioStream = ytdl(url, { filter: "audioonly", quality: "highestaudio" });
 
-    ffmpeg(ytProc.stdout)
+    ffmpeg(audioStream)
         .audioBitrate(128)
         .audioCodec("libmp3lame")
         .format("mp3")
