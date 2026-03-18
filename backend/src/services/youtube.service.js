@@ -1,16 +1,26 @@
 import ytdl from "@distube/ytdl-core";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegPath from "ffmpeg-static";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
-/**
- * Fetches video metadata (title, duration, thumbnail) using @distube/ytdl-core natively.
- * @param {string} url - YouTube video URL
- * @returns {{ title: string, thumbnail: string, duration: number }}
- */
+// Build agent from cookies env var
+function getAgent() {
+    if (!process.env.YT_COOKIES) return undefined;
+
+    // Write cookies to a temp file (ytdl needs a file path)
+    const cookiePath = path.join(os.tmpdir(), "yt_cookies.txt");
+    fs.writeFileSync(cookiePath, process.env.YT_COOKIES);
+    return ytdl.createAgent(fs.readFileSync(cookiePath, "utf-8"));  // or pass cookies array
+}
+
+const agent = getAgent();
+
 export async function getVideoInfo(url) {
-    const info = await ytdl.getInfo(url);
+    const info = await ytdl.getInfo(url, agent ? { agent } : {});
     const videoDetails = info.videoDetails;
     return {
         title: videoDetails.title,
@@ -19,20 +29,18 @@ export async function getVideoInfo(url) {
     };
 }
 
-/**
- * Streams YouTube audio transcoded to MP3 directly into an HTTP response.
- *
- * @param {string} url   - YouTube video URL
- * @param {string} title - Used for the Content-Disposition filename
- * @param {import("http").ServerResponse} res - Express response object to pipe into
- */
 export function streamMp3(url, title, res) {
     const safeTitle = title.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_") || "audio";
 
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}.mp3"`);
 
-    const audioStream = ytdl(url, { filter: "audioonly", quality: "highestaudio" });
+    // Pass agent here too
+    const audioStream = ytdl(url, {
+        filter: "audioonly",
+        quality: "highestaudio",
+        ...(agent && { agent }),
+    });
 
     ffmpeg(audioStream)
         .audioBitrate(128)
