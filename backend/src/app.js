@@ -18,7 +18,8 @@ app.use("/api/v1/convert", convertRouter);
 
 app.use(express.static(path.join(__dirname, "../public")));
 
-app.get("*", (req, res) => {
+// Catch-all route to serve React app for SPA routing
+app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 
