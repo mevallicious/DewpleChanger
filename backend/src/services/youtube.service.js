@@ -1,21 +1,45 @@
-import ytdl from "@distube/ytdl-core";
+import ytDlpExec from "yt-dlp-exec";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegPath from "ffmpeg-static";
+import { spawn } from "child_process";
+import { createRequire } from "module";
+import path from "path";
+import { fileURLToPath } from "url";
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+
+
+const ytDlpBin = path.join(
+    path.dirname(require.resolve("yt-dlp-exec/package.json")),
+    "bin",
+    process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"
+);
+
 /**
- * Fetches video metadata (title, duration, thumbnail) using @distube/ytdl-core natively.
+ * Fetches video metadata (title, duration, thumbnail) via yt-dlp.
+ * yt-dlp handles YouTube 429 / bot-detection natively, unlike ytdl-core.
+ *
  * @param {string} url - YouTube video URL
  * @returns {{ title: string, thumbnail: string, duration: number }}
  */
 export async function getVideoInfo(url) {
-    const info = await ytdl.getInfo(url);
-    const videoDetails = info.videoDetails;
+    const info = await ytDlpExec(url, {
+        dumpSingleJson: true,
+        noWarnings: true,
+        noPlaylist: true,
+        noCheckCertificates: true,
+        preferFreeFormats: true,
+    });
+
     return {
-        title: videoDetails.title,
-        thumbnail: videoDetails.thumbnails[videoDetails.thumbnails.length - 1].url,
-        duration: parseInt(videoDetails.lengthSeconds, 10),
+        title: info.title,
+        thumbnail: info.thumbnail,
+        duration: info.duration, // seconds (number)
     };
 }
 
@@ -32,9 +56,15 @@ export function streamMp3(url, title, res) {
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}.mp3"`);
 
-    const audioStream = ytdl(url, { filter: "audioonly", quality: "highestaudio" });
+    // Spawn the bundled yt-dlp binary, pipe audio stdout → ffmpeg → mp3 → response
+    const ytDlpProcess = spawn(ytDlpBin, [
+        "-f", "bestaudio",
+        "--no-playlist",
+        "-o", "-",         
+        url,
+    ]);
 
-    ffmpeg(audioStream)
+    ffmpeg(ytDlpProcess.stdout)
         .audioBitrate(128)
         .audioCodec("libmp3lame")
         .format("mp3")
@@ -45,4 +75,15 @@ export function streamMp3(url, title, res) {
             }
         })
         .pipe(res, { end: true });
+
+    ytDlpProcess.stderr.on("data", (data) => {
+        console.error("[yt-dlp]", data.toString());
+    });
+
+    ytDlpProcess.on("error", (err) => {
+        console.error("[yt-dlp] spawn error:", err.message);
+        if (!res.headersSent) {
+            res.status(500).json({ success: false, message: "yt-dlp failed to start" });
+        }
+    });
 }
