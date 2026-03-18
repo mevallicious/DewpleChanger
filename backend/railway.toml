@@ -1,0 +1,5 @@
+[build]
+buildCommand = "rm -rf node_modules && npm install"
+
+[deploy]
+startCommand = "node server.js"
