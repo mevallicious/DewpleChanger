@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build": "npm install --prefix ../frontend && npm run build --prefix ../frontend && rm -rf public && cp -a ../frontend/dist public/",
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "npx nodemon server.js"
   },

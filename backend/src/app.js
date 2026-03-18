@@ -12,15 +12,15 @@ const app = express();
 
 app.use(express.json());
 app.use(cookieParser());
+app.use(express.static("./public"))
 
 app.use("/api/auth", authRouter);
 app.use("/api/v1/convert", convertRouter);
 
-app.use(express.static(path.join(__dirname, "../public")));
 
-// Catch-all route to serve React app for SPA routing
-app.get(/.*/, (req, res) => {
-    res.sendFile(path.join(__dirname, "../public/index.html"));
-});
+
+app.use('*name',(req,res)=>{    //aisi koi route pe apna user req bhejta hai joh exist hi ni karti toh yeh kardo wildcard
+    res.sendFile(path.join(__dirname,"..","/public/index.html"))
+})
 
 export default app;
