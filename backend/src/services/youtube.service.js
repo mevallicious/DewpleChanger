@@ -5,14 +5,14 @@ import { spawn } from "child_process";
 import { createRequire } from "module";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
+import os from "os";
 
 ffmpeg.setFfmpegPath(ffmpegPath);
-
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
-
 
 const ytDlpBin = path.join(
     path.dirname(require.resolve("yt-dlp-exec/package.json")),
@@ -21,34 +21,52 @@ const ytDlpBin = path.join(
 );
 
 /**
+ * Writes YOUTUBE_COOKIES env var to a temp file and returns the path.
+ * Returns null if env var is not set.
+ */
+function getCookiesFilePath() {
+    const cookiesContent = process.env.YOUTUBE_COOKIES;
+    if (!cookiesContent) return null;
+
+    const tmpPath = path.join(os.tmpdir(), "yt_cookies.txt");
+    fs.writeFileSync(tmpPath, cookiesContent, "utf-8");
+    return tmpPath;
+}
+
+/**
  * Fetches video metadata (title, duration, thumbnail) via yt-dlp.
- * yt-dlp handles YouTube 429 / bot-detection natively, unlike ytdl-core.
- *
  * @param {string} url - YouTube video URL
  * @returns {{ title: string, thumbnail: string, duration: number }}
  */
 export async function getVideoInfo(url) {
-    const info = await ytDlpExec(url, {
+    const cookiesPath = getCookiesFilePath();
+
+    const options = {
         dumpSingleJson: true,
         noWarnings: true,
         noPlaylist: true,
         noCheckCertificates: true,
         preferFreeFormats: true,
-    });
+    };
+
+    if (cookiesPath) {
+        options.cookies = cookiesPath;
+    }
+
+    const info = await ytDlpExec(url, options);
 
     return {
         title: info.title,
         thumbnail: info.thumbnail,
-        duration: info.duration, // seconds (number)
+        duration: info.duration,
     };
 }
 
 /**
  * Streams YouTube audio transcoded to MP3 directly into an HTTP response.
- *
  * @param {string} url   - YouTube video URL
  * @param {string} title - Used for the Content-Disposition filename
- * @param {import("http").ServerResponse} res - Express response object to pipe into
+ * @param {import("http").ServerResponse} res - Express response object
  */
 export function streamMp3(url, title, res) {
     const safeTitle = title.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_") || "audio";
@@ -56,13 +74,20 @@ export function streamMp3(url, title, res) {
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}.mp3"`);
 
-    // Spawn the bundled yt-dlp binary, pipe audio stdout → ffmpeg → mp3 → response
-    const ytDlpProcess = spawn(ytDlpBin, [
+    const cookiesPath = getCookiesFilePath();
+
+    const args = [
         "-f", "bestaudio",
         "--no-playlist",
-        "-o", "-",         
+        "-o", "-",
         url,
-    ]);
+    ];
+
+    if (cookiesPath) {
+        args.unshift("--cookies", cookiesPath);
+    }
+
+    const ytDlpProcess = spawn(ytDlpBin, args);
 
     ffmpeg(ytDlpProcess.stdout)
         .audioBitrate(128)
