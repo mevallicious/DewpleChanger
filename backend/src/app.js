@@ -2,13 +2,24 @@ import express from "express";
 import authRouter from "./routes/auth.routes.js";
 import cookieParser from "cookie-parser";
 import convertRouter from "./routes/convert.routes.js"; 
-const app = express()
+import path from "path";
+import { fileURLToPath } from "url";
 
-app.use(express.json())
-app.use(cookieParser())
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+const app = express();
 
-app.use("/api/auth",authRouter)
-app.use("/api/v1/convert",convertRouter)
+app.use(express.json());
+app.use(cookieParser());
 
-export default app
+app.use("/api/auth", authRouter);
+app.use("/api/v1/convert", convertRouter);
+
+app.use(express.static(path.join(__dirname, "../public")));
+
+app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "../public/index.html"));
+});
+
+export default app;

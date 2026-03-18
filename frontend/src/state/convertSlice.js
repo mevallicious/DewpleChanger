@@ -21,7 +21,7 @@ export const fetchVideoInfo = createAsyncThunk(
 
 const initialState = {
   videoInfo: null,
-  status: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
+  status: 'idle', 
   error: null,
 };
 
