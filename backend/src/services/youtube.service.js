@@ -15,7 +15,8 @@ export async function getVideoInfo(url) {
         noCheckCertificates: true,
         noWarnings: true,
         preferFreeFormats: true,
-        addHeader: ["referer:youtube.com", "user-agent:googlebot"],
+        // Using mobile clients helps bypass datacenter IP blocks without cookies
+        extractorArgs: "youtube:player_client=android,ios",
     });
 
     return {
@@ -38,13 +39,13 @@ export function streamMp3(url, title, res) {
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}.mp3"`);
 
- 
     const ytProc = youtubedl.exec(url, {
         format: "bestaudio",
         output: "-",
         quiet: true,
+        // Apply the same bot-bypass to the download stream
+        extractorArgs: "youtube:player_client=android,ios",
     }, { stdio: ["ignore", "pipe", "ignore"] });
-
 
     ffmpeg(ytProc.stdout)
         .audioBitrate(128)
